@@ -1,0 +1,424 @@
+---
+title: "ECON430 Homework3"
+author: "Ruiqi Zhang"
+date: "2020/11/26"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# I. Introduction of Data. (describe the data, provide some background on the topic, etc.).
+
+This is weekly data on US finished motor gasoline products supplied (in thousands of barrels per day) from February 1991 to May 2005.Data source from Rob J Hyndman website (https://robjhyndman.com). 
+
+The motivation is to use the known data to predict future motor gasoline products supply. 
+```{r}
+rm(list=ls(all=TRUE))
+rm(list=ls(all=TRUE))
+library(knitr)
+library(tm)
+library(SnowballC)
+library(lda)
+library(topicmodels)
+library(LDAvis)
+library(dplyr)
+library(stringi)
+library(plyr)
+library(foreign)
+#library(xts)
+library(tis)
+library(jsonlite)
+library(FNN)
+library(hexbin)
+library(RColorBrewer)
+library(MASS)
+library(ldatuning)
+library(gofastr)
+library(quantmod)
+library(tseries)
+library(foreign)
+library(forecast)
+library(MASS)
+library(TTR)
+library(vars)
+library(readtext) 
+library(tidyr) 
+library(scales)
+library(tinytex)
+library(fitdistrplus)
+library(rgl)
+library(car)
+library(zoo)
+```
+
+First, get data
+
+```{r cars}
+gas <- ts(read.csv("C://Users//zhangruiqi//Desktop//430 Applied Statistics//homework//HW3//gasoline.csv",header=FALSE)   [,1],freq=52,start=1991+31/365.25)
+summary(gas)
+#Find if there is NA
+table(is.na(gas))
+#No NAs
+```
+# Results (answers and plots). Consists of two parts:
+## Modeling and Forecasting Trend
+
+**(a). Show a time-series plot of the data.**
+
+```{r}
+plot(gas,type='l',col="darkseagreen")  
+```
+
+**(b) Does your plot in (a) suggest that the data are covariance stationary? Explain your answer.**
+
+No. There is a upward trend in gasoline products supply each year. Moreover, there is seasonality in each year. 
+
+Box-Ljung test suggested the data is not covariance stationary.
+```{r}
+# Box-Ljung test
+Box.test(gas,type = "Ljung",lag=log(length(gas)))
+```
+**(c) Plot and discuss the ACF and PACF of your data.**
+
+Plot ACF and PACF.
+```{r}
+#plot ACF
+acf(gas, main="ACF of gasoline product supply")
+
+#plot PACF
+pacf(gas,main="PACF of gasoline product supply")
+```
+
+From ACF and PACF, the data is not stationary. 
+Transform the data to log-first difference. 
+```{r}
+#log first difference
+gas_1<-diff(log(gas))
+gas_2<-log(gas)
+tsdisplay(gas_1)
+```
+```{r}
+#Test if stationary again
+adf.test(gas_1)
+```
+
+Transformed data is stationary. 
+
+**(d) Fit a linear and nonlinear (e.g., polynomial, exponential, quadratic + periodic, etc.) model to your series. In one window, show both figures of the original times series plot with the respective fit.**
+
+1). Linear model
+```{r}
+#Construct time dummy
+t=seq(1991+31/365.25,2005+132/365.25,length=length(gas))
+
+#Fit linear model
+m1=lm(gas~t)
+summary(m1)
+
+#Plot original times series plot with the respective fit
+plot(gas,ylab="Gasoline", xlab="Time", lwd=2, col="slategray")
+lines(t,m1$fit,col="lightpink",lwd=2)
+```
+
+2). Log model
+```{r}
+#Log Fit
+
+m2=lm(log(gas)~t)
+summary(m2)
+
+#Plot original times series plot with the respective log fit
+plot(log(gas),type="l", ylab="log Gasoline", xlab="Time", lwd=2, col="slategrey")
+lines(t,m2$fit,col="lightpink",lwd=2)
+```
+
+3). Quadratic periodic model
+```{r}
+#Quadratic periodic Fit
+m3=lm(gas~t+I(t^2)+sin(2*pi*t)+cos(2*pi*t))
+summary(m3)
+
+#Plot original times series plot with the respective fit
+plot(gas,type="l",  xlab="Time", lwd=2, col="slategrey")
+lines(t,m3$fit,col="lightpink",lwd=2)
+```
+
+**(e) For each model, plot the respective residuals vs. fitted values and discuss your observations.**
+```{r}
+#plot Linear Residuals
+plot(m1$fit,m1$res, ylab="Linear Residuals",type='p',xlab="Fitted",col="slategrey")
+
+#plot Log Residuals
+plot(m2$fit,m2$res, ylab="Log Residuals",type='p',xlab="Fitted",col="slategrey")
+
+#plot Quadratic Periodic Residuals
+plot(m3$fit,m1$res, ylab="Quadratic Residuals",type='p',xlab="Fitted",col="slategrey")
+```
+
+The residuals for linear and log models still have some periodic pattern while the one for the quadratic periodic model seems random. 
+
+**(f) For each model, plot a histogram of the residuals and discuss your observations.**
+```{r}
+#Plot histograms for residuals
+#histogram for linear fit residuals
+hist(m1$res,col=blues9)
+
+#histogram for log fit residuals
+hist(m2$res,col=blues9)
+
+#histogram for quadratic periodic fit residuals
+hist(m3$res,col=blues9)
+```
+
+ The residual for the quadratic periodic model seems symmetricly distributed. 
+
+**(g) For each model, discuss the associated diagnostic statistics ($R^2$, t-distribution, F-distribution,etc.)**
+```{r}
+#Compare linear, log-linear and quadratic-periodic models.
+library(stargazer)
+stargazer(m1,m2,m3,type = "text")
+```
+
+From the table above, quadratic-periodic model has the highest $R^2$. All models are statistically significant in F-Stastics. Looking t-statistic, some coefficients in the quadratic-periodic model are not significant. We should remove the quadratic term in the model. 
+
+Add one more linear-periodic model. 
+```{r}
+#linear-periodic model
+m4=lm(gas~t+sin(2*pi*t)+cos(2*pi*t))
+summary(m4)
+
+#Plot original times series plot with the respective fit
+plot(gas,type="l",  xlab="Time", lwd=2, col="slategrey")
+lines(t,m4$fit,col="lightpink",lwd=2)
+```
+
+All coefficients in this linear-periodic model are statistically significant and $R^2$ is high.  
+
+**(h) Select a trend model using AIC and one using BIC (show the values obtained from each criterion). Do the selected models agree?**
+```{r}
+#Compare models using AIC and BIC
+AIC(m1,m2,m3,m4)
+BIC(m1,m2,m3,m4)
+```
+Excluding log-linear model, both AIC and BIC suggest that linear-periodic model represents trend best. We select this model. 
+
+
+**(i) Use your preferred model to forecast h-steps (at least 16) ahead. Your forecast should include the respective uncertainty prediction interval. Depending on your data, h will be in days, months, years, etc.**
+
+Predict weekly gasoline products supply trend before 2006.
+```{r}
+tn=data.frame(t=seq(2005+151/365.25,2006,7/365.25))
+pred=predict(lm(gas~t+sin(2*pi*t)+cos(2*pi*t)), tn, se.fit = TRUE)
+#plot(c(gas,pred$fit),type='l',xlim=c(1992,2005+151/365.25))
+pred.plim = predict(lm(gas~t+sin(2*pi*t)+cos(2*pi*t)),tn, level =0.95, interval="prediction")
+pred.clim = predict(lm(gas~t+sin(2*pi*t)+cos(2*pi*t)), tn,level=0.95, interval="confidence")
+matplot(tn$t,cbind(pred.clim, pred.plim[,-1]),
+        lty=c(1,1,1,3,3), type="l", lwd=2, ylab="predicted y",xlab="Time")
+
+```
+Gasoline product supply trend is expected to go up in summer and drop in winter.
+
+Also, do a forecast for the next 16 weeks. 
+```{r}
+#Plot 16 steps trend forecast
+plot(forecast(m4$fitted.values,h=16,level=0.95),col="slategrey")
+```
+
+The trend is going up while vibrating, it will go up in the next 16 weeks. 
+```{r}
+#Use Time Series Forecast to predict
+plot(forecast(gas),main="Data with Respective Point and Interval Forecasts",xlab="Week", ylab="Gasoline forecast",shadecols="oldstyle")
+```
+
+## 2. Modeling and Forecasting Seasonality
+**(a) Construct and test (by looking at the diagnostic statistics) a model with a full set of seasonal dummies.**
+
+```{r}
+#Season model
+fit_season=tslm(gas ~ season+0)
+summary(fit_season)
+
+#Plot seasons vs original data
+plot(gas,main="Time Series Data: Seasonality",col="slategrey")
+lines(fit_season$fitted.values, col="lightpink")
+```
+
+There are 52 season dummies, each representing week in a year. All of the coefficients are statistically significant. $R^2=0.9936$, which suggests season model fits really well. 
+
+**(b) Plot the estimated seasonal factors and interpret your plot.**
+```{r}
+#Plot seasonal factors
+plot(fit_season$coef,type='l',ylab='Seasonal Factors',
+     xlab="Season",lwd=2,col="lightskyblue", main="Plot of Seasonal
+     Factors")
+```
+
+It seems like around the 30th week motor gasoline product supply reaches its peak in the year. This means in the summer, about July or August, more motor gasoline product are supplied on the market. If the market is in equibrlium, this means the highest demand for motor gasoline product comes in summer. 
+
+**(c) In order to improve your model, add the trend model from problem 1 to your seasonal model. We will refer to this model as the full model. For the full model, plot the respective residuals vs. fitted values and discuss your observations.**
+
+From problem 1, the linear-periodic model is the best trend. Now combine it with season model to build full model. 
+```{r}
+#Full model with trend and seasonality
+fullmodel<-tslm(gas~ t + sin(2*pi*t) +cos(2*pi*t)+ season+0)
+
+#Plot full model fit
+plot(gas,type="l",  xlab="Time", lwd=2, col="slategrey")
+lines(t,fullmodel$fit,col="lightpink",lwd=2)
+```
+
+The full model fits quite well, especially around 1992 and around 2004. Plot respective residuals vs. fitted values and respective residuals vs. time.
+
+Plot of residuals are shown as follows. 
+```{r}
+#respective residuals vs. fitted values
+plot(fullmodel$fit,fullmodel$res, ylab="Residuals",type='p',xlab="Fitted values",main="Residual vs Fitted values",col="slategrey")
+
+#respective residuals vs. time
+plot(t,fullmodel$res, ylab="Residuals",type='l',xlab="Time",main="Residual vs Time",col="slategrey")
+```
+
+The residuals seems to show no pattern, with some outliers. However, when plotting residual with time, residuals seems to have changing mean with time on the graph. 
+
+Let's test whether the residuals are stationary or not. 
+```{r}
+#ADF test of residuals
+adf.test(fullmodel$res)
+
+#KPSS test of residuals
+kpss.test(fullmodel$res)
+```
+
+Both ADF and KPSS tests suggested that the residual of full model is stationary. We can later use the full model to detrend and de-season. 
+
+Let's look at corrrelations of residuals. 
+```{r}
+#ACF residuals
+acf(fullmodel$res)
+#PACF residuals
+pacf(fullmodel$res)
+```
+
+The residual ACF and PACF plot look like a MA(3) process. Later MA(3) model moght be used. 
+
+**(d) Interpret the respective summary statistics including the error metrics of your full model.**
+```{r}
+#summary statistics and error metrics
+summary(fullmodel)
+accuracy(fullmodel)
+```
+
+The linear trend term and sine term is statistically significant ,while after adding seasonal factors cosine term is insignificant. All seasonal factors are statistically significant. $R^2$ is 0.999, which suggests fitting was almost perfect. F-statistic is also statistically significant. 
+
+The RMSE is 254.17. The mean of the data is 8136. Error is around 3%, which is still a bit large. Considering the $R^2$ is very high, we suspect the model has overfitting. 
+
+Try another model simpler. 
+
+```{r}
+#Construct another model without sine and cosine terms
+fullmodel_2<-tslm(gas~ t + season+0)
+
+#See summary statistics and error metrics
+summary(fullmodel_2)
+accuracy(fullmodel_2)
+```
+
+The RMSE in the simpler model didn't decrease. We will still use the first full model, with about 3% error. 
+
+**(e) Use the full model to forecast h-steps (at least 16) ahead. Your forecast should include the respective prediction interval.**
+
+Forecast gasoline product supply a year (52 weeks) ahead. 
+```{r}
+#Plot and forecast in 52 weeks
+tn_2 = seq(2005+151/365.25,2006+151/365.25,length=52)
+pred2=forecast(fullmodel, tn_2,level=0.95)
+plot(pred2,main="Forecast of full model",col="lightsteelblue4")
+
+```
+
+The supply of gasoline product is expected to go up, go down and go up again in the next year. 
+
+**(f) Plot the STL decomposition plot, and based on it, choose between an additive and multiplicative seasonal adjustment. Perform the correction, and plot the seasonally adjusted series. Based on this adjustment, would your trend model from problem 1 still be appropriate? Explain your answer in detail.**
+
+```{r}
+#Plot the STL decomposition plot
+plot(stl(gas,s.window="periodic"),col="slategrey")
+```
+
+From the graph, the seasonal vibrations didn't vary as trend goes up. So additive seasonal adjustment should be used at the first guess. 
+
+Let's decompose trend and seasons and plot. 
+
+```{r}
+#trend+season
+decompose<-decompose(gas,type = "additive")
+gas_trend<-decompose$trend
+gas_season<-decompose$seasonal
+gas_adj1<-gas_trend+gas_season
+
+#plot trend+season vs original data
+plot(gas,col="cadetblue",main="Seasonal Adjusted Data")
+lines(t,gas_adj1,col="cadetblue1")
+
+
+#trend*season
+decompose2<-decompose(gas, type="multiplicative")
+gas_trend2<-decompose2$trend
+gas_season2<-decompose2$seasonal
+gas_adj2<-gas_trend2*gas_season2
+
+#plot trend*season vs original data
+plot(gas,col="cadetblue",main="Seasonal Adjusted Data")
+lines(t,gas_adj2,col="cadetblue1")
+
+```
+
+On the plot it seems like both additive and multiplicative models fits about the same. Let's test if the remaining random part is stationary. 
+
+```{r}
+#ADF test for additive Random terms #no stationary
+adf.test(which(decompose$random!="NA"))
+
+#KPSS test for additive Random terms #no stationary
+kpss.test(which(decompose$random!="NA"))
+
+##ADF test for multiplicative Random terms #no stationary
+adf.test(which(decompose2$random!="NA"))
+
+##KPSS test for multiplicative Random terms #no stationary
+kpss.test(which(decompose$random!="NA"))
+```
+Both ADF and KPSS test suggested that remainders for additive and multiplicative models are not stationary. 
+
+Then, further check the remaining random term plot to see which model is better. 
+```{r}
+library(ggplot2)
+#Plot Random terms
+#Additive
+plot(decompose$random,main="Additive",type='p',col="slategrey")
+
+#Multiplicative
+plot(decompose2$random,main="Multiplicative",type='p',col="slategrey")
+```
+Compare the random term plots, the remainders of additive model seems more stationary. The remainder terms of multiplicative model is having the pattern to converge to 1. It is not the suitable model, the additive model is suitable. 
+
+**Model decision: additive. **
+
+
+The trend model from problem 1 is still appropriate since the residual is stationary while the decomposed additive model is not stationary in residual. But the full model is still an additive model, which is the same conclusion as this part reached. 
+
+# III.Conclusions and Future Work
+
+The prediction for gasoline supply is expected to grow up to around 9644 thousands of barrels per day in the coming summer and drop to around 8756 thousands of barrels per day in the next winter. 30th week motor gasoline product supply reaches its peak in the year.Around the 30th week motor gasoline product supply reaches its peak in the year and around the 6 or 7th week motor gasoline product supply reaches its bottom.
+
+Our model is an additive model with trend, seasonality and random terms $Y_t=T_t+S_t+R_t$. There is a linear-periodic trend with sine and cosine terms. There are 52 seasonal factors, representing 52 weeks in a year. This model fits very well, with $R^2=0.999$. According to RMSE, the model will have around 3% error. 
+
+From model accuracy, we detect the model have some overfitting problem. Future work is to simplify the model and reduce variables. From the residual stationary test, we found the residual in the full model is stationary. In the future we can exclude the non-stationary part and use ARMA to predict the stationary residuals. 
+
+# IV.References .
+[1] Data source: Rob J Hyndman website,https://robjhyndman.com
+
+[2] UCLA Tine series lecture notes. 

@@ -1,0 +1,221 @@
+---
+title: "402 HW"
+author: "Ruiqi Zhang"
+date: "2020/11/29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tm)
+library(SnowballC)
+library(lda)
+library(topicmodels)
+library(LDAvis)
+library(dplyr)
+library(stringi)
+library(plyr)
+library(foreign)
+#library(xts)
+library(tis)
+library(jsonlite)
+library(FNN)
+library(hexbin)
+library(RColorBrewer)
+library(MASS)
+library(ldatuning)
+library(gofastr)
+library(quantmod)
+library(tseries)
+library(foreign)
+library(forecast)
+library(MASS)
+library(TTR)
+library(vars)
+library(readtext) 
+library(tidyr) 
+library(scales)
+library(tinytex)
+library(fitdistrplus)
+library(rgl)
+library(car)
+library(zoo)
+```
+
+# 1
+
+Acquire data first.
+
+```{r cars}
+#get data
+data <- ts(read.csv("C://Users//zhangruiqi//Desktop//402 Macrotheory//HW 402//Dataset for Homework.csv",header=FALSE)[,1],start=1)
+head(data)
+```
+
+(A)
+Plot data
+
+```{r pressure, echo=FALSE}
+plot(data)
+```
+
+Test if stationary
+```{r}
+#ADF test
+adf.test(data,k=1)
+#kpss test
+kpss.test(data)
+
+```
+The data is stationary. 
+
+(B)
+```{r}
+#Using first 150 steps construct AR(1) model
+data_150=data[1:150]
+
+fit=arima(as.numeric(data_150) ,order = c(1,0,0))
+fit
+```
+
+(C)Recursive prediction
+```{r}
+#Construct new dataframe
+datapred<-data.frame(realdata=data,fitdata=numeric(200),error=numeric(200))
+
+#Recursive prediction
+for(i in 1:50){
+# Each iteration construct a new AR(1) model using known and predicted data acquired
+fit_recur=arima(as.numeric(datapred$realdata[1:150+i-1]),order = c(1,0,0))
+#Point prediction for each iteration
+datapred$fitdata[150+i]=as.numeric(fit_recur$coef[1])*as.numeric(datapred$realdata[150+i-1])+as.numeric(fit_recur$coef[2])
+#Calculate error each iteration
+datapred$error[150+i]=as.numeric(datapred$realdata[150+i])-as.numeric(datapred$fitdata[150+i])
+}
+
+#Calculate RMSE
+errorpred=datapred$error[151:200]
+RMSE=sqrt(mean((errorpred)^2))
+RMSE
+```
+(D)
+```{r}
+#AR(2) model
+fit2=arima(as.numeric(data_150) ,order = c(2,0,0))
+fit2
+```
+
+```{r}
+#Construct new dataframe2
+datapred2<-data.frame(realdata=data,fitdata2=numeric(200),error2=numeric(200))
+
+#Recursive prediction AR(2)
+for(i in 1:50){
+# Each iteration construct a AR(2) model using known and predicted data acquired
+fit_recur2=arima(as.numeric(datapred2$realdata[1:150+i-1]),order = c(2,0,0))
+#Point prediction for each iteration
+datapred2$fitdata2[150+i]=as.numeric(fit_recur2$coef[1])*as.numeric(datapred2$realdata[150+i-1])+as.numeric(fit_recur2$coef[2])*as.numeric(datapred2$realdata[150+i-2])+as.numeric(fit_recur2$coef[3])
+#Calculate error each iteration
+datapred2$error2[150+i]=as.numeric(datapred2$realdata[150+i])-as.numeric(datapred2$fitdata2[150+i])
+}
+
+#Calculate RMSE
+errorpred2=datapred2$error2[151:200]
+RMSE2=sqrt(mean((errorpred2)^2))
+RMSE2
+```
+RMSE for AR(1) model is 2.191, RMSE for AR(2) model is 2.194. AR(1) model is better. 
+
+#2
+```{r}
+#construct GDP time series
+GDPdata <- read.csv("C://Users//zhangruiqi//Desktop//402 Macrotheory//HW 402//GDPC1.csv",header = TRUE)
+GDPdata =ts(GDPdata$GDPC1,start = 1950,frequency = 4)
+head(GDPdata)
+```
+
+Take logs and plot the data. 
+```{r}
+logGDP=log(GDPdata)
+plot(logGDP,main="Log US GDP data")
+
+```
+Take first difference of log-GDP data. 
+```{r}
+#log-first difference and log
+lGDP_diff=diff(logGDP)
+plot(lGDP_diff)
+#lGDP_diff
+```
+Test if the log first difference data was stationary. 
+```{r}
+#adf test
+adf.test(lGDP_diff)
+#kpss test
+kpss.test(lGDP_diff)
+```
+
+The data is stationary. 
+There is autocorrelation in this dataset. Plot ACF and PACF for the data. 
+```{r}
+#plot acf
+acf(lGDP_diff)
+#plot pacf
+pacf(lGDP_diff)
+```
+
+From the PACF plot, there is only one spike standing out. This seems like an AR(1) process. Use an AR(1) model. 
+```{r}
+#Construct an AR(1) model
+gdpfit=arima(as.numeric(window(lGDP_diff, start=1950, end=c(2011,4), frequency=4)) ,order = c(1,0,0))
+gdpfit
+
+```
+Recursive prediction. 
+```{r}
+#Construct new data frame for training set
+datapredgdp<-data.frame(realdata=lGDP_diff,fitdata=numeric(length(lGDP_diff)),error=numeric(length(lGDP_diff)))
+datapredgdp$fitdata[1:248]=datapredgdp$realdata[1:248]
+
+#Recursive prediction
+for(i in 1:32){
+# Each iteration update a new AR(1) model using the latest actual data acquired
+recur_gdp=arima(as.numeric(datapredgdp$realdata[1:248+i-1]),order = c(1,0,0))
+#Point prediction for each iteration
+datapredgdp$fitdata[248+i]=as.numeric(recur_gdp$coef[1])*as.numeric(datapredgdp$realdata[248+i-1])+as.numeric(recur_gdp$coef[2])
+#Calculate error each iteration
+datapredgdp$error[248+i]=as.numeric(datapredgdp$realdata[248+i])-as.numeric(datapredgdp$fitdata[248+i])
+}
+
+
+#datapredgdp
+datapredgdp$realdata[1]
+```
+```{r}
+#time dummy
+t=seq(1950.25,2020,length=length(GDPdata))
+#Construct predicted GDP
+logGDP_pre=numeric(length(logGDP))
+logGDP_pre[1]=logGDP[1]
+for (i in 1:280) {
+  logGDP_pre[1+i]=logGDP_pre[i]+datapredgdp$fitdata[i]
+}
+GDP_pre=exp(logGDP_pre)
+GDP_pre=ts(GDP_pre,start=c(1950,1),frequency = 4)
+```
+
+```{r}
+#Plot actual data and predicted data
+plot(GDPdata,xlim=c(2012,2020),ylim=c(15000,22000))
+lines(t,GDP_pre,col="red")
+```
+
+```{r}
+#Calculate pretiction error
+errorpredgdp=GDP_pre[249:281]-GDPdata[249:281]
+#calculate RMSE
+RMSEgdp=sqrt(mean((errorpredgdp)^2))
+RMSEgdp
+```
+

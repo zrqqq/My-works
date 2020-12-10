@@ -1,0 +1,927 @@
+---
+title: "430_Project2"
+author: "Kai YANG"
+chunk_output_type: console
+editor_options: null
+output:
+  pdf_document:
+    toc: yes
+    latex_engine: xelatex
+  fig_caption: yes
+  highlight: haddock
+  df_print: paged
+  number_sections: yes
+  html_document:
+    df_print: paged
+    toc: yes
+fontsize: 10.5pt
+fontfamily: mathpazo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls(all=TRUE))
+library(aTSA)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(car)
+library(pastecs)
+library(lattice)
+library(foreign)
+library(MASS)
+library(KernSmooth)
+library(fastICA)
+library(cluster)
+library(mgcv)
+library(rpart)
+library(pan)
+library(tis)
+library(rgl)
+library('KFAS')
+#install.packages("astsa")
+require(astsa)
+library(xtable)
+library(tidyverse)
+library(AER)
+library(broom)
+#install.packages("PoEdata")
+#library(PoEdata)
+library(leaps)
+library(caret)
+#install.packages("Metrics")
+library(Metrics)
+require(stats)
+require(stats4)
+library(DAAG)
+library(TTR)
+require("datasets")
+require(graphics)
+library(forecast)
+library(TSA)
+library(timeSeries)
+library(fUnitRoots)
+library(fBasics)
+library(tseries)
+library(timsac)
+library(fpp)
+library(strucchange)
+#install.packages("MSBVAR")
+#library(MSBVAR)
+library(vars)
+library(lmtest)
+library(dlnm)
+library('FKF')
+library(zoo)
+library(fitdistrplus)
+```
+
+# I. Introduction
+
+The datasets we would use for this group project are the International Trade: Imports: Value (goods): Total for China and international and Trade: Exports: Value (goods): Total for China, retrieved from FRED (link included in Reference). Both of the datasets will cover monthly values from Jan 1992 to Sept. 2020,each dataset has 345 values in total. We would expect each of the datasets to have trend, cycle, and seasonality from the pure look of the time series plot (to reduce redundancy, the graph will be shown in II.1), and the existence of the above properties would be varified in section II. Further, we would also expect the two datasets to have some correlations with each other, as the datasets are import and export value of the same country (Bebczuk,2008), which will also be verified in the following discussions. 
+
+This project will contain a short and brief introduction, a thorough result of statistical analysis with answers and plots, and a conclusion of the results and future work direction. The reference list and dataset link are provided at the end of this project, and the R code has already been included in II. results part.
+
+
+
+
+# II. Results(answers and plots)
+
+## II.1 Produce a time-series plot of your data including the respective ACF and PACF plot
+
+Get the data International Trade: Imports: Value (goods): Total for China and International Trade: Exports: Value (goods): Total for China. Transfer to time series. 
+
+Upload the import data
+```{r}
+#import
+#setwd("C:/Users/admin/Desktop")
+import=read.csv("C://Users//zhangruiqi//Desktop//430 Applied Statistics//group pj//pj2//CHNXTIMVA01NCMLM.csv",header=T)
+attach(import)
+#import data from 1992/1/1 to 2020/9/1 
+ts_import=ts(import[,2],start=1992,freq=12)
+#monthly import value from Jan 1992 to Sept 2020, we introduce log to stabilize the series
+attach(import)
+tsdisplay(ts_import)
+#Time-series plot, ACF and PACF of import
+```
+
+Upload the export data
+```{r}
+#export
+export=read.csv("C://Users//zhangruiqi//Desktop//430 Applied Statistics//group pj//pj2//CHNXTEXVA01NCMLM.csv",header=T)
+attach(export)
+#export data from 1992/1/1 to 2020/9/1 
+ts_export=ts(export[,2],start=1992,freq=12)
+#monthly export value from Jan 1992 to Sept 2020
+tsdisplay(ts_export)
+#Time-series plot, ACF and PACF of export
+```
+From the time series plots of import and export, we can see that the seasonality is likely to be multiplicative (the variation is growing with time), so we use log to stablize them.
+
+```{r,warning=FALSE}
+lg_import<-log(ts_import)
+lg_export<-log(ts_export)
+```
+
+Note: lg_import and lg_export are the datas that we would test and use for the following questions.
+
+```{r,warning=FALSE}
+tsdisplay(lg_import)
+tsdisplay(lg_export)
+# We can also plot the Time-series plot, ACF and PACF of the time series after log.
+```
+
+
+
+## II.2 As a baseline model, fit an ARIMA model to each series and comment on the fit. For the next questions, you will instead use the model estimated in (3) for their respective answers.
+```{r,warning=FALSE}
+#fit an ARIMA model to log import data
+auto.arima(lg_import)
+#fit an ARIMA model to log export data
+auto.arima(lg_export)
+
+```
+
+Evaluation of the fit.
+
+```{r}
+fit_import<-auto.arima(lg_import)
+fit_export<-auto.arima(lg_export)
+plot(lg_import,ylab="import value", xlab="Time", lwd=2, col='skyblue3')
+lines(t,fit_import$fit,col="red3",lwd=2)
+#compare the fitted value and original data of import
+plot(lg_export,ylab="import value", xlab="Time", lwd=2, col='skyblue3')
+lines(t,fit_export$fit,col="red3",lwd=2)
+#compare the fitted value and original data of export
+```
+
+From the two graphs above it shows that the arima model of both lg_import and lg_export fit well.
+
+Let's see the residuals.
+```{r,warning=FALSE}
+# we can also look at the residuals of log import and log export
+par(mfrow=c(2,1))
+plot(t,fit_import$res, main="Residual plot for import",ylab="Residuals",xlab="fited value")
+abline(h=0, col="red",lwd=2)
+plot(t,fit_export$res, main="Residual plot for export",ylab="Residuals",xlab="fited value")
+abline(h=0, col="red",lwd=2)
+```
+
+We can see that both of the residuals of import and export are distributed randomly around zero (property of white noise). Which can also show that the arima fit is good for both import and export.
+
+Are the residuals white noise? We can also do the Ljung-Box test.
+
+```{r}
+#Box-Ljung test for log import
+Box.test(fit_import$residuals,  type = "Ljung-Box")
+```
+
+```{r}
+#Box-Ljung test for log export
+Box.test(fit_export$residuals,  type = "Ljung-Box")
+```
+
+From the Box-Ljung test, residuals are white noise. The ARIMA model in the system is quite efficient. 
+
+## II.3 Fit a model that includes, trend, seasonality and cyclical components. Make sure to discuss your model in detail.
+
+```{r,warning=FALSE}
+# define time variable
+t<-seq(1992, 2020.75,length=length(lg_import))
+t2<-t^2
+```
+
+```{r,warning=FALSE}
+#recall our time series plot
+plot(lg_import,ylab="import value", xlab="Time", lwd=2, col='skyblue3')
+```
+
+Use the stl decomposition plot to see more clearly about the trend.
+
+```{r}
+#import
+plot(stl(lg_import,s.window="periodic"))
+```
+
+```{r}
+#export
+plot(stl(lg_export,s.window="periodic"))
+```
+Both log-import and log-export seem to have an additive form. 
+For the trend part of both import and export, we would like to choose from linear and quadratic as these two would be likely to fit our time series model based on the above graphs.
+```{r,warning=FALSE}
+#import
+m1_import<-lm(lg_import~t)
+m2_import<-lm(lg_import~t+t2)
+summary(m1_import)
+summary(m2_import)
+AIC(m1_import,m2_import)
+BIC(m1_import,m2_import)
+#for Import, quadratic trend is better
+#export
+m1_export<-lm(lg_export~t)
+m2_export<-lm(lg_export~t+t2)
+summary(m1_export)
+summary(m2_export)
+AIC(m1_export,m2_export)
+BIC(m1_export,m2_export)
+#for Export, quadratic trend is better
+```
+
+For both import and export, ausdratic trend is better. 
+
+Fit the model with seasonality and trend, look at the residuals to figure out the cycle terms.
+```{r}
+#import
+month <- seasonaldummy(lg_import)
+m3_import<-tslm(lg_import~month+t+t2)
+acf(m3_import$residuals,lag.max = 100)
+pacf(m3_import$residuals,lag.max = 100)
+```
+
+From the ACF and PACF, the residual shows a distribution of AR(1), so for the full model we will include a AR(1) cycle.
+
+```{r}
+# Try different seasonal orders and use AIC to select the best one.
+full_import_1=Arima(lg_import,order=c(1,0,0),xreg = cbind(t, t2,month))
+
+
+
+Box.test(full_import_1$residuals,  type = "Ljung-Box")
+# the p value is quite small, and thus we would reject H0 and conculdes that the residuals are not white noise. 
+
+#we will imporve our model by intergrating it once.
+full_import_2=Arima(lg_import,order=c(1,1,0),xreg = cbind(t, t2,month))
+Box.test(full_import_2$residuals,  type = "Ljung-Box")
+#from the result of Box.test we will not reject H0 and thus conclude that the residuals are white noise (good news!)
+
+plot(lg_import,ylab="import value", xlab="Time", lwd=2, col='skyblue3')
+
+lines(t,full_import_2$fit,col="red3",lwd=2)
+#seems fits well except at the begining. 
+```
+
+We will use full_import_2 for import, and as the first fit is not so good, we will remove it. 
+
+```{r}
+#export
+month <- seasonaldummy(lg_export)
+m3_export<-tslm(lg_export~month+t+t2)
+acf(m3_export$residuals,lag.max = 100)
+pacf(m3_export$residuals,lag.max = 100)
+```
+
+
+The residual also shows a distribution of AR(1), so for the full model we will include a AR(1) cycle.
+
+```{r}
+
+
+full_export_1=Arima(lg_export,order=c(1,0,0),xreg = cbind(t, t2,month))
+Box.test(full_export_1$residuals,  type = "Ljung-Box")
+ 
+# the p value is quite small, and thus we would reject H0 and conculdes that the residuals are not white noise. 
+
+#we will imporve our model by intergrating it once.
+full_export_2=Arima(lg_export,order=c(1,1,0),xreg = cbind(t, t2,month))
+
+Box.test(full_export_2$residuals,  type = "Ljung-Box")
+#from the result of Box.test we will not reject H0 and thus conclude that the residuals are white noise (good news!)
+plot(lg_export,ylab="import value", xlab="Time", lwd=2, col='skyblue3')
+lines(t,full_export_2$fit,col="red3",lwd=2)
+#good fit except the first value (1992.1.1)
+```
+
+
+
+We will use full_export_2 as our full_model, and as the first fit is not so good, we will remove it. 
+
+
+
+
+## II.4 Plot the respective residuals vs. fitted values and discuss your observations.
+
+```{r}
+head(full_import_2$fit)
+head(full_import_2$res)
+```
+
+We can see that the first fit has abnormal large value, and so does the first residual. This is caused by the intergration we have (the second "1" in order=c(1,1,0) of arima).The extreme large number will cause trouble to ploting the residuals , so that we would remove the first fit.
+
+```{r}
+#remove the first value of the fit for import and export
+full_import_2$fit<-full_import_3$fit[-1]
+full_import_2$res<-full_import_3$res[-1]
+full_export_2$fit<-full_export_3$fit[-1]
+full_export_2$res<-full_export_3$res[-1]
+```
+
+
+
+```{r}
+
+par(mfrow=c(2,1))
+#import
+plot(full_import_2$fit,full_import_2$res, main="Residual plot for import",ylab="Residuals",xlab="fited value")
+abline(h=0, col="red",lwd=2)
+#export
+plot(full_export_2$fit,full_export_2$res, main="Residual plot for export",ylab="Residuals",xlab="fited value")
+abline(h=0, col="red",lwd=2)
+```
+
+We can see that both of the residuals of import and export are distributed randomly around zero (property of white noise). Which can also show that the arima fit is good for both import and export.
+
+
+## II.5 Plot the ACF and PACF of the respective residuals and interpret the plots.
+
+```{r}
+#Import
+par(mfrow=c(2,1))
+acf(full_import_2$residuals,main="Residual Sample Autocorrelations",xlab="Displacement")
+pacf(full_import_2$residuals,main="Residual Sample Partial Autocorrelations", xlab="Displacement")
+```
+
+Both of the acf and pacf are within the blue line (significantly close to zero), which is the property of white noise (consistant with Box test).
+
+```{r}
+#Export
+par(mfrow=c(2,1))
+acf(full_export_2$residuals,lag=36,main="Residual Sample Autocorrelations",xlab="Displacement")
+pacf(full_export_2$residuals,lag=36,main="Residual Sample Partial Autocorrelations", xlab="Displacement")
+```
+
+Both of the acf and pacf are within the blue line (significantly close to zero), which is the property of white noise( consistant with Box test).
+
+## II.6 Plot the respective CUSUM and interpret the plot.
+
+
+```{r}
+library(strucchange)
+full_import_2$res[1]=mean(full_import_2$res)
+plot(efp(full_import_2$res~1, type = "Rec-CUSUM"))
+```
+
+```{r}
+plot(efp(full_export_2$res~1, type = "Rec-CUSUM"))
+```
+
+Both import and export have the black line lies within the red one, which means that there is no structural change.
+
+We can see that from 
+
+## II.7 Plot the respective Recursive Residuals and interpret the plot.
+Recursive Residuals:
+
+```{r}
+full_import_2=Arima(lg_import,order=c(1,1,0),xreg = cbind(t, t2),seasonal=list(order=c(1,0,1)))
+full_export_5=Arima(lg_export,order=c(1,1,0),xreg = cbind(t, t2),seasonal=list(order=c(2,0,2)))
+library(strucchange)
+y_im=recresid(full_import_2$res~1)
+plot(y_im, pch=16,ylab="Recursive Residuals")
+y_ex=recresid(full_export_5$res~1)
+plot(y_ex, pch=16,ylab="Recursive Residuals")
+```
+
+we use the recursive residuals to see if there is structural change. The two residuals plots show similar patterns that the first few recursive estimations have large residuals, and then those residuals gradually scatter around zero. we might suspect that something happen around the first year that cause structural changes.
+
+## II.8 For your model, discuss the associated diagnostic statistics.
+
+For model full_import_2,
+
+```{r}
+summary(full_import_2)
+#See statistical significance of coefficients
+tratio=full_import_2$coef/sqrt(diag(full_import_2$var.coef))
+tratio
+tar1<-0.496/0.0441
+pt(tar1,df=340,lower.tail = T)
+tsar1<-0.9622/0.0117
+pt(tsar1,df=340,lower.tail = F)                   
+tsma1 <-0.4755/0.0518
+pt(tsma1,df=340,lower.tail = T)
+Box.test(full_import_2$residuals,  type = "Ljung-Box")
+```
+Above show the standard errors of coefficients and the respective t-value.By looking at the t-distribution, we find sar1 is significant.  Also we have AIC=-561.05 and BIC=-538.For the accuracy,we have RMSE = 6.688902.
+
+For model full_export_5,
+
+```{r}
+summary(full_export_5)
+#See statistical significance of coefficients
+tratio=full_export_5$coef/sqrt(diag(full_export_5$var.coef))
+tratio
+tear1<-0.4527/0.0458
+pt(tear1,df=338,lower.tail = T)
+tesar1<-1.7142/0.1688
+pt(tesar1,df=338,lower.tail = F)
+tesar2 <-0.7257/0.1640
+pt(tesar2,df=338,lower.tail = T)
+tesam1<-1.3784/0.1658
+pt(tesam1,df=338,lower.tail= T)
+tesma2 <- 0.5441/0.0967
+pt(tesma2,df=338,lower.tail= F)
+Box.test(full_export_5$residuals,  type = "Ljung-Box")
+```
+above show the standard errors of coefficients and the respective t-value. By looking at the t-distribution, we find that sar1 and sma2 are significant.
+For the accuracy,we have RMSE = 5.5325,which is acceptable. box-ljung test has a p-value of 0.99.
+
+## II.9 Use your model to forecast 12-steps ahead. Your forecast should include the respective error bands.
+```{r}
+#seasonal ARIMA model with drift for log import
+f_full_import_2=Arima(lg_import,order=c(1,1,0),include.drift=TRUE,seasonal=list(order=c(1,0,1)))
+#seasonal ARIMA model with drift for log export
+f_full_export_5=Arima(lg_import,order=c(1,1,0),include.drift=TRUE,seasonal=list(order=c(2,0,2)))
+#plot forecast forecast 12 steps of log import
+plot(forecast(f_full_import_2,h=12),shadecols="oldstyle",main="Forest 12 steps log import")
+#plot forecast forecast 12 steps of log export
+plot(forecast(f_full_export_5,h=12),shadecols="oldstyle",main="Forest 12 steps log export")
+```
+
+
+
+## II.10 Fit an appropriate VAR model using your two variables. Make sure to show the relevant plots and discuss your results from the fit.
+### 10.I Test for VAR
+```{r}
+#Combine the original(not logged) data into a data frame
+y <- cbind(ts_import, ts_export)
+ImEx=data.frame(y)
+```
+
+```{r}
+#plot Cross-Correlation Function
+par(mfrow=c(1,1), mar=c(3, 3, 3, 1) + 0.1)
+ccf(ts_import,ts_export,ylab="Cross-Correlation Function", main = "Imports and Exports CCF")
+```
+
+From the graph, all the values depicted here are out of the 95% interval level range, which means that these two variables are significantly correlated.
+
+```{r}
+#Fit a VAR(p) model
+var_model=VAR(ImEx,p=10)
+summary(var_model)
+```
+
+For ts_import, from the result table, up until level 10, the lag import still has siginificant influence on its current value. However there's no specific patterns for export numbers. These lags seem to have significant influence in lag 2, 3, 7, and 10.
+
+For ts_export, similarly, its own lags always have significant impact up until lag 10. However for imports, lag 1, 3, 5, 8, and 10 seem to have some impact.
+
+### 10.II Plot the VAR model
+```{r}
+pdf("varplot.pdf", width=8, height=8) 
+plot(var_model)
+```
+Here we insert the graph for ts_imprt:
+
+![import.](/Users/mayuxi/R/430Project2/import.png)
+We can see that approximately around year 2007 or 2008, the volatility of the errors suddenly becomes quite significant. At the same time, there seems to be a break around 2007 or 2008 as the time trend of import suddenly experienced a sharp drop, and then reversed back to the increasing trend.
+
+Besides, the ACF and PACF do not look that bad, as most of them falls in the 95% range with only lag 12 falls apart. Considering our data are measure in month, this may sugegst that there may be seasonality left to be controled.
+
+And here's the graph for ts_export:
+
+![export.](/Users/mayuxi/R/430Project2/export.png)
+The same situation happens in ts_export series. Around 2007 or 2008, there's a break when the value of exports went over a sharp drop and then reversed back. Besides, the volatility after this time increased a lot. What's worse here is that the ACF & PACF do not present a favorable form as there's no apparent patterns we can directly observed.
+
+Based on all these analysis above, our group decided to adopt the log transformation to partially overcome the sudden volatility around 2007 or 2008 as log function does help to stabilize the data series. Here's the tranformation and the same VAR analysis as follows.
+
+### 10.III Transform the data and test for VAR
+```{r}
+#Use log data
+lg_import <- log(ts_import)
+lg_export <- log(ts_export)
+
+#Combine into one data frame
+y <- cbind(lg_import, lg_export)
+logImEx=data.frame(y)
+
+#Fit a VAR(p) model
+lgvar_model=VAR(logImEx,p=10)
+summary(lgvar_model)
+```
+This time for lg_import, which is the log(ts_import), the result is neater and more readable. Same as before, the self-lag effect is quite persistent, which lasts for the whole process until lag 10. However, this time the cross effect of lg_export on lg_import is much clearer to interpret, this time only lag 1 term is significant under $\alpha=0.05$.
+
+Similar for lg_export, which is the log(ts_export), the result is clearer than the previous test using the original data. Here the self lag effect is only significant under the 1st order in the case when $\alpha=0.05$. And for the cross effect of lg_import on lg_export is much persistence as the reverse one. The first 4 orders of lag terms are all significant when $\alpha=0.05$, and after that the 10th lag also appears to be significant.
+
+In the following steps we will directly look at AIC & BIC to decide which order of lags should we include in our model.
+```{r}
+#VAR Model Selection
+VARselect(logImEx,10)
+```
+Based on the result above, our group finally decide to adopt order=5 which appears twice in the 4 criteria calcilated in the VAR selection process.
+
+```{r}
+#Re-estimate the model using order=5
+lgvar_model=VAR(logImEx,p=5)
+summary(lgvar_model)
+```
+
+### 10.IV Plot the log VAR model
+```{r}
+pdf("lgvarplot.pdf", width=8, height=8) 
+plot(lgvar_model)
+```
+The plots for both imports and exports become better after the log transformation, and here's the graph for lg_imprt:
+
+![lgimport.](/Users/mayuxi/R/430Project2/lgimport.png)
+
+And the graph for lg_export:
+
+![lgexport.](/Users/mayuxi/R/430Project2/lgexport.png)
+As the pattern for imports and exports are quite similar, so here we combine these two and do the joint interpretation and analysis. 
+
+First, the variability of the error terms is much more uniform than using the original data despite the initial severe volatility, which is interestingly the reverse of the original data as the original data appears to be more volatile in the ending part not the beginning.
+
+Second, the ACF & PACF plots are getting better in both cases after the log transformation. It appears that despite the 0 lag which is the current data, the only order being significant is lag 12, still, our group suspect it to be a signal of seasonal ARIMA.
+
+Third, there are still an apparent break near around 2007 or 2008 as the time display of two series presents a clear decrease and afterwards they both return to its normal increasing trend. 
+
+## 11. Compute, plot, and interpret the respective impulse response functions.
+```{r}
+#compute irf
+irf(lgvar_model)
+```
+
+```{r}
+#Plot the Impulse Response Function
+pdf("irfplot.pdf", width=8, height=8) 
+plot(irf(lgvar_model, n.ahead=36))
+```
+Here's the impulse response function graph for lg_imprt:
+
+![irfimport.](/Users/mayuxi/R/430Project2/irfimport.png)
+
+And the impulse response function graph for lg_exprt as follows:
+
+![irfexport.](/Users/mayuxi/R/430Project2/irfexport.png)
+
+The first graph gives the impulse response of lg_import and lg_export respectively when giving a unit shock to lg_import. We can see from the graph that the reaction of lg_import and lg_export are quite similar in this case. Encountering a unit shock from lg_import, both term respond by an immediate drop in value at first, but afterwards the effect fades away.
+
+However, the two variables lg_import & lg_export present different response when receiving a unit shock from lg_export. From the 2nd graph we can see that this unit shock affects lg_export much significantly than lg_import, as the initial impulse response is more apparent and sharper for lg_export, lg_export drops sharply while lg_import even increase a bit.
+
+From the graphs and analysis above, we can to some extend conclude that lg_import cross influence lg_export more than lg_export does on lg_import, which is consistent with the re-estimation above adopting order=5 in part 10.III.
+
+## 12. Perform a Granger-Causality test on your variables and discuss your results from the test.
+```{r}
+#Does lg_import granger-cause lg_export?
+grangertest(lg_export ~ lg_import, order = 5)
+```
+The p-value for this F-statistic is significant under $\alpha=0.001$, which means that we can reject the null of no Grager causality and conclude that stattistically, lg_import does Granger causes lg_export.
+
+```{r}
+#Does lg_export granger-cause lg_import?
+grangertest(lg_import ~ lg_export, order = 5)
+```
+Similarly, we perform the Granger causalty test for the reverse relationship here, and the above result is also consistent with our previous interpretation which specifies that lg_export does not have much influence on lg_import. Here, the p-value is so large that we cannot reject the null of no Granger causality. Thus, statistically we can conclude that lg_export does not granger cause lg_import.
+
+## 13. Use your VAR model to forecast 12-steps ahead. Your forecast should include the respective error bands. Comment on the differences between the two forecasts (VAR vs. ARIMA).
+```{r}
+#Forecast with VAR model
+var.predict = predict(object=lgvar_model, n.ahead=12)
+plot(var.predict)
+```
+As for us, the forecast is persuasive in the sense that it's on the right trend. However, the possible drawback here is that the VAR prediction here does not cover the seasonality pattern in the training lg_import & lg_export data series. Overall, we think that the forecast of lg_import may perform better than lg_export as the seasonality feature is not that obvious in lg_import especially when comparing with the plot of lg_export. Thus, the problem that the forecast does not cover the seasonality will not affect the performance on lg_import that much.
+
+For the forecast error bands, it is getting wider as time indicator increases, which is also consistent with the theory we learnt during class as compared with short terms, longer term will bring more uncertainty in the forecast process, which will consequently contributes to larger forecast error when time perids extend.
+
+Compared with the forecast with ARIMA model forecast for lg_import & lg_export respectively in part II.9, we have the following observations:
+1> The forecast trend is similar using both models, revealing a slightly increasing pattern.
+2> The forecast range is also quite similar, the forecasts both lie in the range (27,28) indicating by the value of y-axis.
+3> Neither of the forecast seems to capture the cycle and seasonality in the data series.
+
+## 14. Backtest your ARIMA model. Begin by partitioning your data set into an estimation set and a prediction set.
+First we found and exaluated 2 ARIMA models to prepare for the following forecast.
+
+### Model: ARIMA
+Try an Arima model for import data. 
+```{r}
+#ARIMA model for import data
+fullmodel_im=auto.arima(lg_import)
+summary(fullmodel_im)
+
+#Plot residual vs fitted 
+plot(fullmodel_im$fitted,fullmodel_im$residuals)
+#plot residuals
+plot(t,fullmodel_im$residuals)
+```
+We choose the ARIMA(2,1,0) model with seasonal orders (2,1,2) to predict import. 
+
+The following steps test for the fitness of this ARIMA model. 
+```{r}
+#plot data vs fitted
+plot(lg_import)
+lines(fitted(fullmodel_im),col="red")
+#See accuracy of arima model for import
+accuracy(fullmodel_im)
+```
+From the graph, the model fits pretty well. RMSE is 0.099. It is small compared with the scale of data, which lies in between 24 and 27. 
+
+Try an Arima model for export data. 
+```{r}
+#ARIMA model for export data
+fullmodel_ex=auto.arima(lg_export)
+summary(fullmodel_ex)
+
+#Plot residual vs fitted 
+plot(fullmodel_ex$fitted,fullmodel_ex$residuals)
+#plot residuals
+plot(t+1,fullmodel_ex$residuals)
+```
+
+We choose an ARIMA(1,1,2) model with seasonal orders (2,1,1) to predict export. 
+
+Here's how well this ARIMA model fits.
+```{r}
+#plot data vs fitted
+plot(lg_export)
+lines(fitted(fullmodel_ex),col="red")
+#See accuracy of arima model for export
+accuracy(fullmodel_ex)
+```
+The model fits pretty well. RMSE is 0.085. It is small compared with the scale of data, which lies in between 24 and 28.
+
+After the ARIMA model selection above, we are now well set for the forecast part.
+
+### 14.I Partition into training & testing dataset
+Let the first 273 observations, which are the first 22 years, be training set and the rest 6 years be estimation set. 
+
+### 14.II Use a recursive backtesting scheme, and forecast 12-steps ahead at each iteration. Compute the mean absolute percentage error at each step. Provide a plot showing the MAPE over each iteration.
+
+Let's use recursive method to predict 60 iterations 72 observations, in other words, 6 years of China's log-import value.
+```{r}
+#Create a place to store MAPEs
+MAPE12frame_im=numeric(60)
+#Recursive prediction
+for(i in 1:60){
+#train set, updated each iteration
+trainrecur_im12=lg_import[1:(273+i-1)]
+
+#estimation set
+testrecur_im12=lg_import[(274+i-1):345]
+
+# Each iteration update a new arima model using the latest actual data in training set
+recur_im12=arima(trainrecur_im12,order=c(2,1,0),seasonal=list(order=c(2,1,2)))
+
+#12 steps point prediction for each iteration
+fore_recur12_im=forecast(recur_im12,h=12)
+
+#Calculate MAPE each iteration
+error12recur_im=testrecur_im12[1:12]-fore_recur12_im$mean
+MAPE12recur_im=mean(abs(testrecur_im12[1:12]-fore_recur12_im$mean)*100/testrecur_im12[1:12])
+MAPE12frame_im[i]=MAPE12recur_im
+#print(MAPE12)
+}
+```
+
+Let's plot yearly average MAPE with each iteration.
+```{r}
+#plot 12 step MAPE of import 
+plot(MAPE12frame_im,xlab="iterations",main="Recursive 12-step MAPE of log-import")
+abline(a=0.5,b=0.00)
+```
+
+Do the same thing to China's log-export data. 
+```{r}
+#Create a place to store MAPEs
+MAPE12frame_ex=numeric(60)
+#Recursive prediction
+for(i in 1:60){
+#train set, updated each iteration
+trainrecur_ex12=lg_export[1:(273+i-1)]
+
+#estimation set
+testrecur_ex12=lg_export[(274+i-1):345]
+
+# Each iteration update a new arima model using the latest actual data in training set
+recur_ex12=arima(trainrecur_ex12,order=c(1,1,2),seasonal=list(order=c(2,1,1)))
+
+#12 steps point prediction for each iteration
+fore_recur12_ex=forecast(recur_ex12,h=12)
+
+#Calculate MAPE each iteration
+error12recur_ex=testrecur_ex12[1:12]-fore_recur12_ex$mean
+MAPE12recur_ex=mean(abs(testrecur_ex12[1:12]-fore_recur12_ex$mean)/testrecur_ex12[1:12])
+MAPE12frame_ex[i]=MAPE12recur_ex
+#print(MAPE12)
+}
+```
+
+Let's plot yearly average MAPE on log-export data with each iteration.
+```{r}
+#plot 12 step MAPE of export 
+plot(MAPE12frame_ex,xlab="iterations",main="Recursive 12-step MAPE of log-export")
+abline(a=0.005,b=0.00)
+```
+
+### 14.III Shorten your forecast horizon to only 1-step ahead. Compute the absolute percentage error at each iteration, and plot.
+
+Now let's use recursive method to predict each month in an iteration and see absolute percentage error each iteration for import. 
+```{r}
+#Create a place to store APEs
+MAPE1frame_im=numeric(72)
+#Recursive prediction
+for(i in 1:72){
+#train set
+trainrecur_im1=lg_import[1:(273+i-1)]
+
+#test set
+testrecur_im1=lg_import[(274+i-1):345]
+
+# Each iteration update a new arima model using the latest actual data acquired
+recur_im1=arima(trainrecur_im1,order=c(2,1,0),seasonal=list(order=c(2,1,2)))
+
+#1 step Point prediction for each iteration
+fore_recur1_im=forecast(recur_im1,h=1)
+
+#Calculate MPE each iteration
+error1recur_im=testrecur_im1[1]-fore_recur1_im$mean
+MAPE1recur_im=as.numeric(abs(testrecur_im12[1]-fore_recur1_im$mean)/testrecur_im1[1])
+MAPE1frame_im[i]=MAPE1recur_im
+#print(MAPE1)
+}
+```
+
+Let's plot monthly APE with each iteration.
+```{r}
+plot(MAPE1frame_im,xlab="iterations",main="Recursive 1-step APE for log-import")
+abline(a=0.005,b=0.00)
+```
+
+Do the same thing for export. 
+```{r}
+#Create a place to store APEs
+MAPE1frame_ex=numeric(72)
+#Recursive prediction
+for(i in 1:72){
+#train set
+trainrecur_ex1=lg_export[1:(273+i-1)]
+
+#test set
+testrecur_ex1=lg_export[(274+i-1):345]
+
+# Each iteration update a new arima model using the latest actual data acquired
+recur_ex1=arima(trainrecur_ex1,order=c(1,1,2),seasonal=list(order=c(2,1,1)))
+
+#1 step Point prediction for each iteration
+fore_recur1_ex=forecast(recur_ex1,h=1)
+
+#Calculate MPE each iteration
+error1recur_ex=testrecur_ex1[1]-fore_recur1_ex$mean
+MAPE1recur_ex=as.numeric(abs(testrecur_ex12[1]-fore_recur1_ex$mean)/testrecur_ex1[1])
+MAPE1frame_ex[i]=MAPE1recur_ex
+#print(MAPE1)
+}
+```
+
+Let's plot monthly APE with each iteration for export.
+```{r}
+plot(MAPE1frame_ex,xlab="iterations",main="Recursive 1-step APE for log-export")
+abline(a=0.005,b=0.00)
+```
+
+### 14.IV
+From the plots above, both import and export, when 48 months later, 1-step predict give smaller errors all below 0.005. For 0-48 months, 12-step predict give smaller errors. If we want to predict further time scale for import and export, such as 4-6 years, we prefer to predict step by step. If we want to predict closer time scale for import and export, such as 0-4 years, we prefer to predict 12 steps a time. But overall, 12-step longer horizon seems to predict better. 
+
+### 14.V Now test your model using a moving window backtesting scheme. Forecast out 12-steps ahead at each iteration, and plot the forecast errors observed at each iteration. Repeat for a 1-step ahead forecast horizon. Provide plots of both.
+Let training length be 273. We use 273 periods back as training set and the rest as estimation set. 
+
+Use moving window to next 6 years forecast log-import first. 
+```{r}
+MAPE12frame_mw_im=numeric(60)
+#Moving window prediction
+for(i in 1:60){
+#train set, window length=273, move 1 period each iteration
+trainmw_im12=lg_import[i:(273+i-1)]
+
+#test set
+testmw_im12=lg_import[(274+i-1):345]
+
+# Each iteration update a new arima model using the latest actual data acquired
+mw_im12=arima(trainmw_im12,order=c(2,1,0),seasonal=list(order=c(2,1,2)))
+
+#12 steps point prediction for each iteration
+fore_mw12_im=forecast(mw_im12,h=12)
+
+#Calculate MAPE each iteration
+error12_mw_im=testmw_im12[1:12]-fore_mw12_im$mean
+MAPE_mw12_im=mean(abs(testmw_im12[1:12]-fore_mw12_im$mean)/testmw_im12[1:12])
+MAPE12frame_mw_im[i]=MAPE_mw12_im
+#print(MAPE_mw12)
+}
+```
+
+Let's plot moving window yearly MAPE with each iteration for import.
+```{r}
+plot(MAPE12frame_mw_im,xlab="iterations",main="Moving window 12-step MAPE for log-import")
+abline(a=0.005,b=0.00)
+```
+
+Do 1-step moving window back test for log-import. 
+```{r}
+#Create a place to store APEs
+MAPE_mw1frame_im=numeric(72)
+#Moving window prediction
+for(i in 1:72){
+#train set
+trainmw_im1=lg_import[i:(273+i-1)]
+
+#test set
+testmw_im1=lg_import[(274+i-1):345]
+
+# Each iteration update a new arima model using the latest actual data acquired
+mw_im1=arima(trainmw_im1,order=c(2,1,2),seasonal=list(order=c(2,1,2)))
+
+#1 step Point prediction for each iteration
+fore_mw1_im=forecast(mw_im1,h=1)
+
+#Calculate APE each iteration
+error_mw1_im=testmw_im1[1]-fore_mw1_im$mean
+MAPE_mw1_im=as.numeric(abs(testmw_im12[1]-fore_mw1_im$mean)/testmw_im1[1])
+MAPE_mw1frame_im[i]=MAPE_mw1_im
+#print(MAPE_mw1)
+}
+```
+
+Let's plot moving window monthly APE with each iteration for import.
+```{r}
+plot(MAPE_mw1frame_im,xlab="iterations",main="Moving window 1-step APE of log-import")
+abline(a=0.005,b=0.00)
+```
+
+Do the same thing again to log-export. 
+```{r}
+MAPE12frame_mw_ex=numeric(60)
+#Moving window prediction
+for(i in 1:60){
+#train set, window length=273, move 1 period each iteration
+trainmw_ex12=lg_export[i:(273+i-1)]
+
+#test set
+testmw_ex12=lg_export[(274+i-1):345]
+
+# Each iteration update a new arima model using the latest actual data acquired
+mw_ex12=auto.arima(trainmw_ex12)
+
+#12 steps point prediction for each iteration
+fore_mw12_ex=forecast(mw_ex12,h=12)
+
+#Calculate MAPE each iteration
+error12_mw_ex=testmw_ex12[1:12]-fore_mw12_ex$mean
+MAPE_mw12_ex=mean(abs(testmw_ex12[1:12]-fore_mw12_ex$mean)/testmw_ex12[1:12])
+MAPE12frame_mw_ex[i]=MAPE_mw12_ex
+#print(MAPE_mw12)
+}
+```
+
+Let's plot moving window yearly MAPE with each iteration for export.
+```{r}
+plot(MAPE12frame_mw_ex,xlab="iterations",main="Moving window 12-step MAPE for log-export")
+abline(a=0.005,b=0.00)
+```
+
+Do 1-step moving window back test for log-export. 
+```{r}
+#Create a place to store APEs
+MAPE_mw1frame_ex=numeric(72)
+#Moving window prediction
+for(i in 1:72){
+#train set
+trainmw_ex1=lg_export[i:(273+i-1)]
+
+#test set
+testmw_ex1=lg_export[(274+i-1):345]
+
+# Each iteration update a new arima model using the latest actual data acquired
+mw_ex1=arima(trainmw_im1,order=c(1,1,2),seasonal=list(order=c(2,1,1)))
+
+#1 step Point prediction for each iteration
+fore_mw1_ex=forecast(mw_ex1,h=1)
+
+#Calculate APE each iteration
+error_mw1_ex=testmw_ex1[1]-fore_mw1_ex$mean
+MAPE_mw1_ex=as.numeric(abs(testmw_ex12[1]-fore_mw1_ex$mean)/testmw_ex1[1])
+MAPE_mw1frame_ex[i]=MAPE_mw1_ex
+#print(MAPE_mw1)
+}
+```
+
+Let's plot moving window monthly APE with each iteration for export.
+```{r}
+plot(MAPE_mw1frame_ex,xlab="iterations",main="Moving window 1-step APE")
+abline(a=0.005,b=0.00)
+```
+
+### 14.VI How do the errors found using a recursive backtesting scheme compare with the errors observed using a moving average backtesting scheme? Which scheme showed higher errors overall, and what does that tell you about your model?
+For 12-steps forecast, errors observed using a moving average backtesting scheme are smaller than using a recursive backtesting scheme. For 1-step forecast, errors are about the same. The recursive backtesting scheme showed higher error in 12-step forecasts. The model with moving average backtesting scheme is better for long horizon forecasts. 
+
+All in all, the ARIMA model is better at long horizon forecast. Errors of long horizon forecast are smaller for moving average backtesting scheme compared with recursive backtesting scheme. Errors of short horizon forecast are about the same in 2 schemes. Rolling windows forecast method is more suitable for this model. 
+
+# Conclusion
+
+We first built a trend+seasonal+cycle model tfor both log-import and log-export data. A quadratic trend and monthly seasonal dummies are used in the model. The cycle part is an ARIMA(1,1,0) model. CUSUM showed no structural change in the data. Although fitting well in the later years, this model doesn't fit well in the first years. We used another seasonal ARIMA model with drift to forecast 12 steps. 
+
+Then a VAR model is built. We used the 5-order model to test the causality between export and import. Both import and export behave quite similar when facing shock in import. One unit shock affects lg_export much significantly than lg_import. lg_import cross influence lg_export more than lg_export does on lg_import. From Granger test, we concluded that lg_import does Granger causes lg_export.
+
+At last, we did a recursive forecast and moving window forecast on log-import data and log-export data. the ARIMA model is better at long horizon forecast. Errors of long horizon forecast are smaller for moving window scheme compared with recursive backtesting scheme. Rolling windows forecast method is more suitable for this model. 
+
+#Reference：
+Bebczuk, R., 2008. Imports-Exports correlation: A new puzzle?. Banco Central de la República Argentina Working Paper, 33.
